@@ -47,14 +47,50 @@ def detect_field_lines(img):
     return grass_mask, line_mask, yard_lines, sidelines, other
 
 
+def _box_area(b):
+    x1, y1, x2, y2 = b["box"]
+    return max(0.0, x2 - x1) * max(0.0, y2 - y1)
+
+
+def _intersection_area(b1, b2):
+    x1 = max(b1["box"][0], b2["box"][0])
+    y1 = max(b1["box"][1], b2["box"][1])
+    x2 = min(b1["box"][2], b2["box"][2])
+    y2 = min(b1["box"][3], b2["box"][3])
+    return max(0.0, x2 - x1) * max(0.0, y2 - y1)
+
+
+def dedupe_boxes(boxes, containment_thresh=0.7):
+    """Drop boxes that are mostly contained within a higher-confidence box.
+
+    Standard NMS compares intersection-over-union, which misses duplicates where
+    one box is a tight, accurate read of a player and the other is a looser
+    partial box covering the same player plus some slop -- their IoU is low
+    (the union is inflated by the slop) even though one box is basically a
+    subset of the other. Intersection-over-smaller-area catches that case.
+    """
+    boxes_sorted = sorted(boxes, key=lambda b: b["conf"], reverse=True)
+    kept = []
+    for b in boxes_sorted:
+        smaller = _box_area(b)
+        is_dup = any(
+            min(smaller, _box_area(k)) > 0
+            and _intersection_area(b, k) / min(smaller, _box_area(k)) > containment_thresh
+            for k in kept
+        )
+        if not is_dup:
+            kept.append(b)
+    return kept
+
+
 def detect_players(model, img):
-    results = model.predict(img, classes=[0], conf=0.2, verbose=False)  # class 0 = person
+    results = model.predict(img, classes=[0], conf=0.08, verbose=False)  # class 0 = person
     boxes = []
     for box in results[0].boxes:
         x1, y1, x2, y2 = box.xyxy[0].tolist()
         cx, cy = (x1 + x2) / 2, y2  # foot position, not box center, for field location
         boxes.append({"box": (x1, y1, x2, y2), "foot_point": (cx, cy), "conf": float(box.conf[0])})
-    return boxes
+    return dedupe_boxes(boxes)
 
 
 def annotate(img, yard_lines, sidelines, other, players):
