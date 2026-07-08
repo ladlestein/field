@@ -84,7 +84,7 @@ def dedupe_boxes(boxes, containment_thresh=0.7):
 
 
 def detect_players(model, img):
-    results = model.predict(img, classes=[0], conf=0.08, verbose=False)  # class 0 = person
+    results = model.predict(img, classes=[0], conf=0.08, verbose=True)  # class 0 = person
     boxes = []
     for box in results[0].boxes:
         x1, y1, x2, y2 = box.xyxy[0].tolist()
