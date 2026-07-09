@@ -125,20 +125,77 @@ multi-frame SR is a dead end. Might still apply to handheld/jittery shots
 
 ---
 
+## 5. Anatomical torso-band probe: is the information even there? (yes)
+
+**Script:** none committed — run ad hoc; method fully described below.
+**Frame:** `data/sr_experiment/frames/f_0217.png` (reference frame of the
+experiment-4 set window).
+**Artifacts:** `data/sr_experiment/out/torso_contact_sheet.jpg`,
+`band_pNN.png` (6x-upscaled bands, one per player).
+
+Motivated by the observation that a human watching the wide shot *can* read
+some jersey numbers, contradicting the pipeline's zero yield. Skips generic
+text detection entirely: YOLO detections filtered to on-field players
+(box height ≥ 45px, foot point within the field area) → 15 players; for each,
+fixed torso bands (8–50% and 25–70% of box height, at full and middle-60%
+width) upscaled 6x bicubic. Two evaluations: (a) human inspection of a
+contact sheet of the bands; (b) PARSeq directly on each band variant, taking
+the variant with highest mean digit mass.
+
+**Human reads (ground truth by eye):** ~half the on-field players have
+readable or near-readable numbers: a clear burgundy 9 (p08), a clear trailing
+0 (p14), a probable 55 (p03, white-on-blue), a legible shoulder/TV number
+(p01, 16 or 18). Two players' numbers were *cut in half by the fixed band*
+(p05, p11) because bent torsos shift the number out of any fixed fraction of
+the box.
+
+**PARSeq on the same bands:** missed every number the eye reads most easily
+(p08's 9 → "5"; p14's 0 → "53"; p03's 55 → nothing), partially agreed on one
+(p01 → "1"), and hallucinated where nothing is visible — digit_share 0.91 on
+a blank white torso (p10 → "9") and a three-digit "144" (p02) despite jersey
+numbers having at most two digits.
+
+**Conclusions:**
+- **The wide shot does carry identity information** for a meaningful fraction
+  of players. This amends experiment 4's verdict: the SR negative result
+  showed stacking adds nothing, not that nothing is there. Single frames
+  already contain human-readable digits our pipeline fails to extract.
+- The failure is now precisely located, and it's *both* stages: CRAFT never
+  localizes these regions at this scale, and PARSeq misreads or hallucinates
+  on them even when banding hands it roughly the right pixels — it's trained
+  on crisp scene text, not 12px cloth-warped digits.
+- **digit_share is not a validity signal at this scale** — it measures
+  "vaguely glyph-shaped," scoring 0.91 on a blank torso and 0.02 on a
+  human-readable 55. Do not use it to gate belief-state ingestion here.
+- Fixed-fraction bands are inadequate localization: bent torsos move the
+  number out of band. Pose keypoints (shoulders/hips → torso quad + rotation
+  normalization, shoulder points → TV-number anchors) are the right localizer.
+- Next build implied by all of the above: pose-guided localization + a small
+  purpose-trained digit classifier (two 10-way heads + "not visible," trained
+  on synthetically degraded jersey digits), evaluated against a
+  replay-derived labeled set (replays of the same play in the same file give
+  ground truth for wide-shot crops with no cross-video alignment).
+
+---
+
 ## Architectural conclusions so far
 
 - **No single frame answers "who's on the field."** Wide formation shots
-  contribute positions/formation; tight closeups and replays contribute
-  identity (jersey numbers); a persistent belief state fuses evidence across
-  shot types, updated Bayesianly (roster/tendency/situation priors ×
-  visual-evidence likelihoods → posteriors that carry forward).
+  contribute positions/formation plus partial identity evidence (experiment 5:
+  roughly half the players' numbers are human-readable there); tight closeups
+  and replays contribute the strongest identity reads; a persistent belief
+  state fuses evidence across shot types, updated Bayesianly
+  (roster/tendency/situation priors × visual-evidence likelihoods →
+  posteriors that carry forward).
 - **Shot-type classification is the router** everything depends on: classify
   each frame (wide formation / closeup / replay / junk), then apply the
   technique that shot supports. Not yet built; likely next.
-- **Localization, not recognition, is the recurring bottleneck** in jersey
-  reading. PARSeq reads nearly perfectly when pointed at the right pixels.
-  Next idea (untested): "localization by anatomy" — skip generic text
-  detection, crop the upper-torso band directly from player boxes.
+- **At closeup scale, localization is the bottleneck** — PARSeq reads nearly
+  perfectly when pointed at the right pixels (experiment 3). **At wide-shot
+  scale, both stages fail** (experiment 5): CRAFT localizes nothing and
+  PARSeq misreads human-readable digits. Closing the wide-shot gap needs
+  pose-guided localization plus a recognizer trained for low-res jersey
+  digits, not better generic OCR.
 - **Guard the belief state.** Recognizer confidence is miscalibrated on
   out-of-distribution input; non-jersey digits abound. Evidence quality
   gating matters as much as evidence collection.
