@@ -178,6 +178,50 @@ numbers having at most two digits.
 
 ---
 
+## 6. Score-bug → nflverse play alignment (first end-to-end agreement)
+
+**Script:** `scripts/scorebug_align.py`
+**Run:** `.venv/bin/python3 scripts/scorebug_align.py data/samples_broadcast/b_10.jpg [...]`
+**Data:** `data/nflverse/` (gitignored): `pbp_participation_2025.parquet`,
+`play_by_play_2025.parquet`, `roster_weekly_2025.parquet`,
+`ftn_charting_2025.parquet`, plus `FINDINGS.md` with schema notes and both
+week-15 rosters. Key facts: 2025 participation data exists publicly (the
+post-2022 gap ended) and covers every real snap of `2025_15_WAS_NYG`; the
+participation file embeds names, positions, and jersey numbers per play,
+index-aligned, so no roster join is needed for number labels.
+
+Method: OCR the FOX score bug (bottom strip, 3x upscaled, charset-restricted;
+the condensed font reads 1 as I and the clock colon as 8 — both handled by
+canonicalization/fallback). Parse game clock, quarter, down & distance. Join
+to play-by-play: filter quarter + down/distance, take the play whose snap
+clock is nearest at-or-below the frame clock (pre-snap frames show more time
+remaining than the recorded snap time). The play_id keys into participation
+for the full 11-v-11 lists.
+
+**Results:** b_01 and b_10 both align to play 828 (Q1 2:14, 1st & 10 at the
+NYG 9, Dart incomplete deep to Slayton). Cross-check against experiment 3's
+independent visual reads from the b_30 closeup: every read number (84, 85,
+78, partial 72) appears in the play's participation list (Johnson, Manhertz,
+Thomas, Eluemunor), and the "GO…" nameplate fragment matches #97 Goldman on
+defense. Two fully independent paths — pixels vs. bug-OCR+database — agree.
+
+**Scope of the claim:** a working demonstration on one play, not a
+validation. Agreement is set-membership ("84 is on the field"), not
+per-detection assignment. Caveat: b_30 is ~20s after the incompletion and may
+show the next snap; reads check out because personnel carried over.
+
+**Instructive failure:** b_20 (post-play frame) doesn't align — the clock is
+past the snap time and the bug still shows the stale pre-play down &
+distance. The play clock's presence in the bug is a clean pre-snap/post-play
+discriminator (b_01/b_10 have one, b_20 doesn't); between-play frames should
+inherit game state via temporal continuity rather than fresh alignment.
+
+**Next:** sweep the full broadcast for alignable pre-snap frames to measure
+alignment failure rates and start harvesting the number-reader training
+corpus (set-level labels from participation numbers).
+
+---
+
 ## Architectural conclusions so far
 
 - **No single frame answers "who's on the field."** Wide formation shots
