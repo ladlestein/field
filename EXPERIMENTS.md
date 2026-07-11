@@ -216,9 +216,21 @@ distance. The play clock's presence in the bug is a clean pre-snap/post-play
 discriminator (b_01/b_10 have one, b_20 doesn't); between-play frames should
 inherit game state via temporal continuity rather than fresh alignment.
 
-**Next:** sweep the full broadcast for alignable pre-snap frames to measure
-alignment failure rates and start harvesting the number-reader training
-corpus (set-level labels from participation numbers).
+**Full-game sweep results** (`scripts/sweep_broadcast.py`, 7,392 frames at
+1 fps): first pass covered 143/164 participation plays; every quarter's
+parsing died at exactly the 1:00 mark because FOX drops the minutes digit
+under a minute (":32"), which also collides with the play-clock format —
+resolved positionally (game clock sits above the quarter token; play clock
+lives on the down-&-distance line). With the sub-minute fix: **151/164
+participation plays covered** (125 with a play-clock pre-snap
+representative; ~96% of scrimmage plays). Remaining misses: 7 kickoffs
+(different bug layout, deprioritized) and 6 scattered plays where the bug
+was likely obscured through the pre-snap window. Outputs:
+`data/harvest/manifest.parquet` (per frame), `plays.csv` (per play with
+number multisets) — the durable label source for number-reader training.
+
+**Next:** harvest v0 crops from the covered plays' representative frames
+(set-level labels from participation numbers).
 
 ---
 

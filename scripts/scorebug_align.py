@@ -66,46 +66,61 @@ def parse_bug(tokens):
     """Extract clock, quarter, down, distance from OCR tokens."""
     state = {"clock": None, "qtr": None, "down": None, "ydstogo": None, "raw": tokens}
 
-    joined_lines = [" ".join(t["text"] for t in line) for line in group_lines(tokens)]
-
-    # Down & distance: "<down> & <n|GOAL>" on one visual line.
-    for line in joined_lines:
-        m = re.search(r"\b([1234])(?:ST|ND|RD|TH)\s*&\s*(\d{1,2}|GOAL)\b", line)
+    # Down & distance: "<down> & <n|GOAL>" on one visual line. Remember that
+    # line's tokens: the play clock lives there too, and under a minute it
+    # looks exactly like a sub-minute game clock, so position is the only
+    # thing separating them.
+    dd_token_ids = set()
+    for line in group_lines(tokens):
+        joined = " ".join(t["text"] for t in line)
+        m = re.search(r"\b([1234])(?:ST|ND|RD|TH)\s*&\s*(\d{1,2}|GOAL)\b", joined)
         if m:
             state["down"] = int(m.group(1))
             state["ydstogo"] = 0 if m.group(2) == "GOAL" else int(m.group(2))
+            dd_token_ids = {id(t) for t in line}
             break
 
-    # Game clock: M:SS or MM:SS (a leading-colon token like ":13" is the play
-    # clock -- excluded by requiring minutes digits). The bug's small colon
-    # often OCRs as an 8 ("2814" for 2:14), so fall back to re-splitting
-    # all-digit tokens around a plausible-colon 8 when no true clock is found.
-    clock_tok = None
+    # Quarter: a standalone down-word (or OT) that is not part of the
+    # down-&-distance line. It anchors where the game clock must sit.
+    qtr_tok = None
     for t in tokens:
+        if id(t) in dd_token_ids:
+            continue
+        if re.fullmatch(r"[1234](?:ST|ND|RD|TH)|OT", t["text"]):
+            if qtr_tok is None or t["cy"] > qtr_tok["cy"]:
+                qtr_tok = t
+    if qtr_tok is not None:
+        state["qtr"] = 5 if qtr_tok["text"] == "OT" else int(qtr_tok["text"][0])
+
+    # Game clock candidates: directly above the quarter token in the main bar
+    # (when we found one), never from the down-&-distance line.
+    if qtr_tok is not None:
+        pool = [
+            t for t in tokens
+            if t["cy"] < qtr_tok["cy"] and abs(t["cx"] - qtr_tok["cx"]) < 80
+        ]
+    else:
+        pool = [t for t in tokens if id(t) not in dd_token_ids]
+
+    # Clean M:SS first. The bug's small colon often OCRs as an 8 ("2814" for
+    # 2:14) or "{"/"."; under a minute the minutes digit disappears entirely
+    # (":32", sometimes with tenths), leaving punct-or-8 + seconds.
+    for t in pool:
         if re.fullmatch(r"\d{1,2}:\d{2}", t["text"]):
-            clock_tok = t
             state["clock"] = t["text"]
             break
-    if clock_tok is None:
-        for t in tokens:
+    if state["clock"] is None:
+        for t in pool:
             m = re.fullmatch(r"(\d{1,2})8(\d{2})", t["text"])
             if m and int(m.group(1)) <= 15 and int(m.group(2)) <= 59:
-                clock_tok = t
                 state["clock"] = f"{m.group(1)}:{m.group(2)}"
                 break
-
-    # Quarter: a standalone down-word that is NOT part of "& n", sitting
-    # below the game clock in the main bar.
-    for t in tokens:
-        m = re.fullmatch(r"([1234])(?:ST|ND|RD|TH)|OT", t["text"])
-        if not m:
-            continue
-        if clock_tok is not None and not (
-            t["cy"] > clock_tok["cy"] and abs(t["cx"] - clock_tok["cx"]) < 80
-        ):
-            continue
-        state["qtr"] = 5 if t["text"] == "OT" else int(t["text"][0])
-        break
+    if state["clock"] is None:
+        for t in pool:
+            m = re.fullmatch(r"[:{.,'8]\s?(\d{1,2})(?:[.]\d)?", t["text"])
+            if m and int(m.group(1)) <= 59:
+                state["clock"] = f"0:{int(m.group(1)):02d}"
+                break
     return state
 
 
