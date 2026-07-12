@@ -229,8 +229,20 @@ was likely obscured through the pre-snap window. Outputs:
 `data/harvest/manifest.parquet` (per frame), `plays.csv` (per play with
 number multisets) — the durable label source for number-reader training.
 
-**Next:** harvest v0 crops from the covered plays' representative frames
-(set-level labels from participation numbers).
+**v0 crop harvest** (`scripts/harvest_crops.py`): first pass used the
+sweep's representative frames directly and 21 plays yielded zero crops —
+inspection showed their "latest play-clock frame" was a closeup or sideline
+shot (FOX cuts away during pre-snap windows; a play clock in the bug does
+not imply a formation shot). Fixed by detection census: for each play, run
+the player detector over its last few aligned pre-snap frames and keep the
+frame with the most valid player boxes — a wide shot always outscores a
+closeup, no learned classifier needed. Result: **157/161 plays, 3,273
+torso crops** (mean 20.8/play), labels play-level via `crops.parquet` →
+`plays.csv` number multisets; 35 plays flagged `low_quality` (no play-clock
+frame; labels may belong to a neighboring play). Random-sample QA: ~25-35%
+of crops show readable/partial digits; junk (refs, sideline staff, blur) is
+present but harmless under set-level labels — the pairing step routes it to
+"no readable number."
 
 ---
 

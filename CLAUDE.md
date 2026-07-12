@@ -50,7 +50,13 @@ vertical, then LOS horizontal); `..._condensed.mp4` is a short cut.
    `data/harvest/plays.csv` (one representative pre-snap frame per play,
    with jersey-number multisets). This manifest is the durable label source
    for training; crops are cheap derived artifacts, safe to re-cut.
-5. `scripts/read_jerseys.py`, `scripts/localize_recognize.py`,
+5. `scripts/harvest_crops.py` — cut per-player torso crops from each
+   covered play's best pre-snap frame (chosen by detection census over the
+   play's aligned frames, since play-clock presence doesn't imply a wide
+   shot). Writes `data/harvest/crops/<policy>/` + `crops.parquet`; labels
+   stay play-level in `plays.csv`. Crop policy is versioned; v0 is the
+   crude fixed torso band.
+6. `scripts/read_jerseys.py`, `scripts/localize_recognize.py`,
    `scripts/sr_stack.py` — experiment scripts (see EXPERIMENTS.md entries
    2-4); superseded in parts but kept as baselines.
 
