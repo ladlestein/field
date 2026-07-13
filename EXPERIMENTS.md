@@ -246,6 +246,36 @@ present but harmless under set-level labels — the pairing step routes it to
 
 ---
 
+## 7. Eval set v0 (Claude-labeled, multiset-cross-checked)
+
+**Script:** `scripts/make_eval_sheets.py` (renders labeling contact sheets)
+**Labels:** `eval/labels_v0.csv` (committed — labeling effort is not
+re-derivable, unlike the rest of the `data/` tree). Columns: slot, crop,
+visibility (full/partial/none/junk), number (with `?` for unreadable digit
+positions), color (w/b jersey), sure (y/n), play_id.
+
+96 crops sampled from the v0 harvest (excluding low_quality plays), labeled
+by Claude by eye at 4x — not yet human-reviewed — with every digit-bearing
+label cross-checked against its play's 22-player number multiset from
+participation data. Human review of the full reads and (especially) the
+"none" calls would strengthen it: the cross-check can catch wrong digits
+but not missed numbers.
+
+**Base rates for v0 wide-shot crops** (the measuring stick for any future
+recognizer): 13/96 full numbers readable (14%; 11 confident), 29 partial
+(30%), 39 none visible (41%), 15 junk/non-players (16%).
+
+**Labeling-process findings:** the multiset cross-check caught 3 human
+labeling errors out of 33 initial digit reads — an over-read ("50" that was
+a lone 0 next to a fold shadow; the multiset contained 0 and not 50), a
+digit confusion (22 vs 24 at 8x — genuinely ambiguous, downgraded to
+partial), and one outright hallucination of a digit from a fabric fold (the
+same failure mode experiment 5 convicted PARSeq of — humans do it too).
+Verification against out-of-band constraints is not optional at this
+resolution, for models or for people. After correction: 32/32 compatible.
+
+---
+
 ## Architectural conclusions so far
 
 - **No single frame answers "who's on the field."** Wide formation shots
