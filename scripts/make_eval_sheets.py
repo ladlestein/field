@@ -12,28 +12,32 @@ to be filled with human-verified labels:
   color: w | b (white or blue jersey) -- resolves which team's multiset
     the number must appear in.
 
-Usage: .venv/bin/python scripts/make_eval_sheets.py --n 96 --per-sheet 12
-Outputs: data/harvest/eval/sheet_NN.jpg, template.csv
+Usage: .venv/bin/python scripts/make_eval_sheets.py [--game GAME_ID] --n 96 --per-sheet 12
+Outputs: data/games/<game_id>/eval/sheet_NN.jpg, template.csv
 """
 import argparse
 import random
-from pathlib import Path
 
 import cv2
 import numpy as np
 import polars as pl
 
-CROPS_DIR = Path("data/harvest/crops/v0")
-EVAL_DIR = Path("data/harvest/eval")
+from game import Game, add_game_arg
+
 SCALE = 4
 
 
 def main():
     ap = argparse.ArgumentParser()
+    add_game_arg(ap)
     ap.add_argument("--n", type=int, default=96)
     ap.add_argument("--per-sheet", type=int, default=12)
     ap.add_argument("--seed", type=int, default=17)
+    ap.add_argument("--policy", default="v0")
     args = ap.parse_args()
+    game = Game(args.game)
+    CROPS_DIR = game.crops_dir(args.policy)
+    EVAL_DIR = game.eval_dir
 
     meta = pl.read_parquet(CROPS_DIR / "crops.parquet").filter(~pl.col("low_quality"))
     rng = random.Random(args.seed)

@@ -20,20 +20,17 @@ fixed-fraction band from experiment 5 (upper 8-50% of the detection box,
 full width), known to clip numbers on bent players; it costs yield, not
 label correctness. Re-cutting under a better policy is cheap by design.
 
-Usage: .venv/bin/python scripts/harvest_crops.py [--policy v0]
-Outputs: data/harvest/crops/<policy>/<play_id>_<k>.jpg + crops.parquet
+Usage: .venv/bin/python scripts/harvest_crops.py [--game GAME_ID] [--policy v0]
+Outputs: data/games/<game_id>/crops/<policy>/<play_id>_<k>.jpg + crops.parquet
 """
 import argparse
-from pathlib import Path
 
 import cv2
 import polars as pl
 from ultralytics import YOLO
 
 from detect_field import detect_players
-
-FRAMES_DIR = Path("data/harvest/frames")
-HARVEST_DIR = Path("data/harvest")
+from game import Game, add_game_arg
 
 MIN_BOX_HEIGHT = 45   # px; smaller than this and no number survives anyway
 MAX_FOOT_Y = 1015     # exclude detections overlapping the score bug
@@ -50,15 +47,17 @@ def torso_band(img, box):
 
 def main():
     ap = argparse.ArgumentParser()
+    add_game_arg(ap)
     ap.add_argument("--policy", default="v0")
     args = ap.parse_args()
     if args.policy != "v0":
         raise SystemExit(f"unknown crop policy {args.policy!r} (only v0 exists)")
+    game = Game(args.game)
 
-    out_dir = HARVEST_DIR / "crops" / args.policy
+    out_dir = game.crops_dir(args.policy)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    manifest = pl.read_parquet(HARVEST_DIR / "manifest.parquet").filter(
+    manifest = pl.read_parquet(game.manifest_path).filter(
         pl.col("play_id").is_not_null()
     )
     yolo = YOLO("yolov8s.pt")
@@ -80,7 +79,7 @@ def main():
 
         best_players, best_idx = [], None
         for idx in pool["frame_idx"].to_list():
-            img = cv2.imread(str(FRAMES_DIR / f"t_{idx:05d}.jpg"))
+            img = cv2.imread(str(game.frames_dir / f"t_{idx:05d}.jpg"))
             if img is None:
                 continue
             players = valid_players(img)

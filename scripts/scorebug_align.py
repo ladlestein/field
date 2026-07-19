@@ -7,18 +7,17 @@ nearest game clock at or before the frame's clock, since a pre-snap frame
 shows more time remaining than the recorded snap time) to get the play_id,
 which keys into the participation file's full 11-v-11 lists.
 
-Usage: .venv/bin/python scripts/scorebug_align.py data/samples_broadcast/b_10.jpg [more frames...]
+Usage: .venv/bin/python scripts/scorebug_align.py [--game GAME_ID] frame.jpg [more frames...]
 """
+import argparse
 import re
-import sys
-from pathlib import Path
 
 import cv2
 import easyocr
 import polars as pl
 
-GAME_ID = "2025_15_WAS_NYG"
-NFLVERSE = Path("data/nflverse")
+from game import Game, add_game_arg
+
 BUG_TOP = 820  # score bug occupies the bottom strip of the 1080p frame
 
 DOWN_WORDS = {"1ST": 1, "2ND": 2, "3RD": 3, "4TH": 4}
@@ -179,13 +178,14 @@ def show_participation(part, play_id):
 
 
 def main():
-    frames = sys.argv[1:] or ["data/samples_broadcast/b_10.jpg"]
-    pbp = pl.read_parquet(NFLVERSE / "play_by_play_2025.parquet").filter(
-        pl.col("game_id") == GAME_ID
-    )
-    part = pl.read_parquet(NFLVERSE / "pbp_participation_2025.parquet").filter(
-        pl.col("nflverse_game_id") == GAME_ID
-    )
+    ap = argparse.ArgumentParser()
+    add_game_arg(ap)
+    ap.add_argument("frames", nargs="+")
+    args = ap.parse_args()
+    game = Game(args.game)
+    pbp = game.pbp()
+    part = game.participation()
+    frames = args.frames
     reader = easyocr.Reader(["en"], gpu=False, verbose=False)
 
     for fpath in frames:

@@ -6,3 +6,4 @@ data/
 *.mov
 *.pt
 .DS_Store
+.idea/

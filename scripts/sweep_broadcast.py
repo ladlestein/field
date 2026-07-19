@@ -8,25 +8,24 @@ vanishes at the snap, so that frame is closest to the set formation) and
 reports coverage stats against the game's real snap count.
 
 Usage:
-  .venv/bin/python scripts/sweep_broadcast.py [--limit N] [--start-idx N]
-Outputs:
-  data/harvest/manifest.parquet   one row per swept frame
-  data/harvest/plays.csv          one row per covered play (representative frame)
+  .venv/bin/python scripts/sweep_broadcast.py [--game GAME_ID] [--limit N]
+      [--start-idx N] [--tag NAME]
+Outputs (per game, under data/games/<game_id>/):
+  manifest.parquet   one row per swept frame
+  plays.csv          one row per covered play (representative frame)
+--tag suffixes the output filenames (manifest_<tag>.parquet) so partial or
+experimental sweeps can't clobber the real ones.
 """
 import argparse
 import re
-import sys
 import time
-from pathlib import Path
 
 import cv2
 import easyocr
 import polars as pl
 
-from scorebug_align import GAME_ID, NFLVERSE, group_lines, match_play, parse_bug
-
-FRAMES_DIR = Path("data/harvest/frames")
-OUT_DIR = Path("data/harvest")
+from game import Game, add_game_arg
+from scorebug_align import group_lines, match_play, parse_bug
 # Tight crop around the FOX bug (both bars); smaller region + 2x scale keeps
 # per-frame OCR fast enough to sweep ~7400 frames.
 ROI = (450, 845, 1500, 1030)  # x1, y1, x2, y2
@@ -73,23 +72,26 @@ def has_play_clock(tokens):
 
 def main():
     ap = argparse.ArgumentParser()
+    add_game_arg(ap)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--start-idx", type=int, default=1)
+    ap.add_argument("--tag", default=None,
+                    help="suffix output filenames instead of overwriting the real ones")
     args = ap.parse_args()
+    game = Game(args.game)
+    suffix = f"_{args.tag}" if args.tag else ""
+    if (args.limit or args.start_idx > 1) and not args.tag:
+        raise SystemExit("partial sweeps must use --tag so they can't clobber the full outputs")
 
-    frames = sorted(FRAMES_DIR.glob("t_*.jpg"))
+    frames = sorted(game.frames_dir.glob("t_*.jpg"))
     frames = [f for f in frames if int(f.stem.split("_")[1]) >= args.start_idx]
     if args.limit:
         frames = frames[:args.limit]
     if not frames:
-        raise SystemExit("no frames found")
+        raise SystemExit(f"no frames found in {game.frames_dir}")
 
-    pbp = pl.read_parquet(NFLVERSE / "play_by_play_2025.parquet").filter(
-        pl.col("game_id") == GAME_ID
-    )
-    part = pl.read_parquet(NFLVERSE / "pbp_participation_2025.parquet").filter(
-        pl.col("nflverse_game_id") == GAME_ID
-    )
+    pbp = game.pbp()
+    part = game.participation()
     reader = easyocr.Reader(["en"], gpu=False, verbose=False)
 
     rows = []
@@ -123,8 +125,8 @@ def main():
                   flush=True)
 
     manifest = pl.DataFrame(rows)
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    manifest.write_parquet(OUT_DIR / "manifest.parquet")
+    game.dir.mkdir(parents=True, exist_ok=True)
+    manifest.write_parquet(game.dir / f"manifest{suffix}.parquet")
 
     # Representative pre-snap frame per play: latest aligned frame that still
     # shows a play clock; fall back to latest aligned frame at all.
@@ -143,14 +145,16 @@ def main():
         "offense_numbers", "defense_numbers",
     )
     reps = reps.join(numbers, on="play_id", how="left").sort("play_id")
-    reps.write_csv(OUT_DIR / "plays.csv")
+    reps.write_csv(game.dir / f"plays{suffix}.csv")
 
-    real_snaps = part.height
+    part_ids = set(part["play_id"].cast(pl.Int64).to_list())
+    in_part = reps.filter(pl.col("play_id").is_in(list(part_ids)))
     print(f"\nframes swept: {manifest.height}")
     print(f"frames with bug state: {manifest.filter(pl.col('clock').is_not_null()).height}")
     print(f"frames aligned: {aligned.height}")
-    print(f"plays covered: {reps.height} / {real_snaps} participation plays")
-    print(f"  with play-clock representative: {reps.filter(pl.col('rep_has_play_clock')).height}")
+    print(f"participation plays covered: {in_part.height} / {part.height} "
+          f"(+{reps.height - in_part.height} aligned to no-play rows)")
+    print(f"  with play-clock representative: {in_part.filter(pl.col('rep_has_play_clock')).height}")
 
 
 if __name__ == "__main__":

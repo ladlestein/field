@@ -34,6 +34,11 @@ vertical, then LOS horizontal); `..._condensed.mp4` is a short cut.
 
 ## Pipeline scripts (in dependency order)
 
+Everything derived from one broadcast lives under
+`data/games/<game_id>/` (frames/, manifest.parquet, plays.csv,
+crops/<policy>/, eval/). `scripts/game.py` owns the layout and nflverse
+table access; pipeline scripts take `--game` (default `2025_15_WAS_NYG`).
+
 1. `scripts/extract_frames.py` — all frame extraction goes through this;
    don't hand-roll ffmpeg commands. Default mode writes 1 fps jpgs named
    `t_NNNNN.jpg` where index N covers video seconds [N-1, N) — downstream
@@ -46,17 +51,23 @@ vertical, then LOS horizontal); `..._condensed.mp4` is a short cut.
    nflverse play, print the 22-player participation lists. Importable parts
    (`parse_bug`, `match_play`, `group_lines`) are reused by the sweep.
 4. `scripts/sweep_broadcast.py` — run alignment over all extracted 1 fps
-   frames; writes `data/harvest/manifest.parquet` (per frame) and
-   `data/harvest/plays.csv` (one representative pre-snap frame per play,
-   with jersey-number multisets). This manifest is the durable label source
-   for training; crops are cheap derived artifacts, safe to re-cut.
+   frames; writes the game's `manifest.parquet` (per frame) and `plays.csv`
+   (one representative pre-snap frame per play, with jersey-number
+   multisets). The manifest is the durable label source for training; crops
+   are cheap derived artifacts, safe to re-cut. Partial runs (`--limit` /
+   `--start-idx`) require `--tag` so they can't clobber the full outputs.
 5. `scripts/harvest_crops.py` — cut per-player torso crops from each
    covered play's best pre-snap frame (chosen by detection census over the
    play's aligned frames, since play-clock presence doesn't imply a wide
-   shot). Writes `data/harvest/crops/<policy>/` + `crops.parquet`; labels
+   shot). Writes the game's `crops/<policy>/` + `crops.parquet`; labels
    stay play-level in `plays.csv`. Crop policy is versioned; v0 is the
-   crude fixed torso band.
-6. `scripts/read_jerseys.py`, `scripts/localize_recognize.py`,
+   crude fixed torso band. Do NOT re-cut a policy dir that an eval set
+   references — crop filenames encode detection order, which is not stable
+   across sources; use a new policy name instead.
+6. `scripts/make_eval_sheets.py` — labeling contact sheets for eval sets;
+   labels live in repo-tracked `eval/` (hand-labeled work is not
+   re-derivable, unlike everything in `data/`).
+7. `scripts/read_jerseys.py`, `scripts/localize_recognize.py`,
    `scripts/sr_stack.py` — experiment scripts (see EXPERIMENTS.md entries
    2-4); superseded in parts but kept as baselines.
 
