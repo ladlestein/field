@@ -18,6 +18,8 @@ from pathlib import Path
 
 import cv2
 import easyocr
+
+from game import easyocr_gpu
 import numpy as np
 from ultralytics import YOLO
 
@@ -152,7 +154,7 @@ def main():
         for i, (x1, y1, x2, y2) in enumerate(boxes):
             crops[i].append(frame[y1:y2, x1:x2])
 
-    reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+    reader = easyocr.Reader(["en"], gpu=easyocr_gpu(), verbose=False)
     parseq, preprocess = load_parseq()
 
     for i, player_crops in enumerate(crops):

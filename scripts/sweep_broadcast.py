@@ -24,7 +24,7 @@ import cv2
 import easyocr
 import polars as pl
 
-from game import Game, add_game_arg
+from game import Game, add_game_arg, easyocr_gpu
 from scorebug_align import group_lines, match_play, parse_bug
 # Tight crop around the FOX bug (both bars); smaller region + 2x scale keeps
 # per-frame OCR fast enough to sweep ~7400 frames.
@@ -92,7 +92,7 @@ def main():
 
     pbp = game.pbp()
     part = game.participation()
-    reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+    reader = easyocr.Reader(["en"], gpu=easyocr_gpu(), verbose=False)
 
     rows = []
     t0 = time.time()

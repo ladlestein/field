@@ -16,7 +16,7 @@ import cv2
 import easyocr
 import polars as pl
 
-from game import Game, add_game_arg
+from game import Game, add_game_arg, easyocr_gpu
 
 BUG_TOP = 820  # score bug occupies the bottom strip of the 1080p frame
 
@@ -186,7 +186,7 @@ def main():
     pbp = game.pbp()
     part = game.participation()
     frames = args.frames
-    reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+    reader = easyocr.Reader(["en"], gpu=easyocr_gpu(), verbose=False)
 
     for fpath in frames:
         img = cv2.imread(fpath)

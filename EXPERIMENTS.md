@@ -276,6 +276,48 @@ resolution, for models or for people. After correction: 32/32 compatible.
 
 ---
 
+## 8. Closeup pseudo-label harvest + color classifier (+ MPS migration)
+
+**Scripts:** `scripts/pseudo_labels.py`, `scripts/classify_colors.py`
+**Run:** `.venv/bin/python3 scripts/pseudo_labels.py [--game ID] [--resume]
+[--after-frame N]`; `classify_colors.py [--game ID]`
+
+**Pseudo-labels** (the "teacher" path: CRAFT+PARSeq reads closeup-scale
+detections ≥180px tall on every aligned frame; a read survives only as a
+clean 1-2 digit decode with digit_share and confidence >0.8 AND membership
+in the play's participation number multiset). Yields: week 15 — 1,128
+labels, 53 distinct numbers; week 1 — 2,213 labels, 61 distinct. Combined:
+**3,341 real per-crop training labels, 70/100 numbers covered, median 34
+examples per number; 30 numbers have zero examples** — the measured gap
+that defines synthetic data's (targeted, deferred) role. Rejection profile:
+of clean, confident digit reads, **~45% failed the multiset check** (week
+15: 929/2,057) — the roster constraint is load-bearing; without it the
+training set would be poisoned at scale. The multiset check is color-blind
+(cross-team number collisions), which is harmless for digit labels.
+
+**Color classifier**: classical HSV (median dominant color of the central
+crop region, grass/skin masked), 95.1% against eval-v0 color labels; found
+one eval labeling error (fixed: 01D w→b). Discovered week 1 WAS wore
+burgundy at home — the untuned burgundy detector puts 44% of week-1 crops
+in "other"; needs a week-1 eval set to tune against.
+
+**MPS migration**: all models (YOLO, CRAFT, PARSeq) now run on the Apple
+GPU via `game.torch_device()` (`FIELD_DEVICE` env overrides). Speedups:
+YOLO 7.4x, CRAFT 6.9x, PARSeq 1.75x; harvester end-to-end ~7x. War
+stories, so they don't get re-learned: (1) detached/nohup'd processes run
+at background QoS and the GPU scheduler throttles them hard — promote with
+`taskpolicy -B -p PID`; (2) one MPS hang (transient, did not reproduce)
+and one reproducible silent process death on a specific frame (t_04884, an
+extreme sideline closeup whose frame-filling detections make giant CRAFT
+input tensors — Metal aborts without a Python traceback). Mitigations now
+in the harvester: `--resume` (continue past the last recorded frame),
+per-frame heartbeat file (pins any hang to an exact frame), `--after-frame`
+(skip a killer input), and a regions-per-crop cap. Still TODO: cap crop
+size fed to CRAFT (downscale >800px crops) to avoid the pathological
+shapes entirely.
+
+---
+
 ## Architectural conclusions so far
 
 - **No single frame answers "who's on the field."** Wide formation shots

@@ -10,6 +10,8 @@ from pathlib import Path
 
 import cv2
 import easyocr
+
+from game import easyocr_gpu
 import numpy as np
 from ultralytics import YOLO
 
@@ -50,7 +52,7 @@ def main():
     players = detect_players(model, img)
     print(f"players detected: {len(players)}")
 
-    reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+    reader = easyocr.Reader(["en"], gpu=easyocr_gpu(), verbose=False)
 
     out_dir = Path("data/output/jersey_crops")
     out_dir.mkdir(parents=True, exist_ok=True)

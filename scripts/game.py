@@ -48,3 +48,21 @@ class Game:
 def add_game_arg(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--game", default=DEFAULT_GAME,
                     help=f"nflverse game_id (default {DEFAULT_GAME})")
+
+
+def torch_device() -> str:
+    """Apple-silicon GPU (mps) when available; FIELD_DEVICE env overrides."""
+    import os
+
+    import torch
+
+    override = os.environ.get("FIELD_DEVICE")
+    if override:
+        return override
+    return "mps" if torch.backends.mps.is_available() else "cpu"
+
+
+def easyocr_gpu():
+    """easyocr's Reader takes False for CPU or a torch device string."""
+    dev = torch_device()
+    return dev if dev != "cpu" else False

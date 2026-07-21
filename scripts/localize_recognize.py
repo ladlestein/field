@@ -18,13 +18,16 @@ from PIL import Image
 from torchvision import transforms
 from ultralytics import YOLO
 
+from game import easyocr_gpu
 from read_jerseys import detect_players, torso_crop
 
 DIGIT_INDICES = list(range(1, 11))  # PARSeq charset: index 1 -> '0' ... 10 -> '9'
 
 
 def load_parseq():
-    model = torch.hub.load("baudm/parseq", "parseq", pretrained=True, trust_repo=True).eval()
+    from game import torch_device
+    model = torch.hub.load("baudm/parseq", "parseq", pretrained=True,
+                           trust_repo=True).eval().to(torch_device())
     preprocess = transforms.Compose([
         transforms.Resize((32, 128), transforms.InterpolationMode.BICUBIC),
         transforms.ToTensor(),
@@ -62,9 +65,10 @@ def digit_distributions(model, preprocess, region_bgr):
     renormalized over the 10 digit classes.
     """
     pil = Image.fromarray(cv2.cvtColor(region_bgr, cv2.COLOR_BGR2RGB))
+    device = next(model.parameters()).device
     with torch.no_grad():
-        logits = model(preprocess(pil).unsqueeze(0))
-        probs = logits.softmax(-1)
+        logits = model(preprocess(pil).unsqueeze(0).to(device))
+        probs = logits.softmax(-1).cpu()
     labels, confidences = model.tokenizer.decode(probs)
     text, conf = labels[0], confidences[0]
 
@@ -100,7 +104,7 @@ def main():
 
     yolo = YOLO("yolov8s.pt")
     players = detect_players(yolo, img)
-    reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+    reader = easyocr.Reader(["en"], gpu=easyocr_gpu(), verbose=False)
     parseq, preprocess = load_parseq()
 
     out_dir = Path("data/output/digit_crops")
