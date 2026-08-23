@@ -316,6 +316,99 @@ per-frame heartbeat file (pins any hang to an exact frame), `--after-frame`
 size fed to CRAFT (downscale >800px crops) to avoid the pathological
 shapes entirely.
 
+> **Superseded by experiment 9.** The label counts above are real but the
+> set was contaminated: ~20-25% of its single-digit labels are wrong. Use
+> `pseudo/v2/`, not `pseudo/v1/`. The CRAFT size cap is also done there.
+
+---
+
+## 9. Auditing the pseudo-labels: where a roster cross-check stops working
+
+**Scripts:** `scripts/pseudo_labels.py` (v2 accept rules),
+`scripts/audit_labels.py` (new — contact sheets for eyeball verification)
+**Run:** `.venv/bin/python3 scripts/pseudo_labels.py --game ID --policy v2`
+
+Before training anything on the entry-8 harvest, sampled its crops and
+looked at them. **The two-digit labels were clean (12/12 correct). The
+single-digit labels — 944 of 3,341, 28% of the set — were ~20-25% wrong**,
+in 36 sampled crops. Two failure modes, both invisible in the aggregate
+statistics:
+
+- **Truncation.** CRAFT boxes one digit of a two-digit number; PARSeq reads
+  it cleanly and confidently. A crop of #34 is labelled "4", #78 → "8",
+  #84 → "4".
+- **Neighbour bleed.** In traffic another player overlaps the detection box
+  and a sliver of *their* number lands inside the crop. One crop is
+  dominated by a lineman wearing 74 with a teammate's "6" in the corner; it
+  was labelled "6".
+
+**Why the roster multiset didn't catch them.** It is a strong guard for
+two-digit reads — a wrong read must match one of ~16 two-digit numbers out
+of 90, so it fails ~4 times in 5. A single-digit read only has to match one
+of the ~3 single-digit numbers on the field out of 10. Worse, single digits
+in the modern NFL belong to quarterbacks, receivers and defensive backs —
+exactly the players who dominate closeups — so the coincidence lands often.
+The guard was never uniformly strong; its strength scales with how much the
+read constrains.
+
+**v2 accept rules.** Per text region: centre of the region must fall in the
+middle 12-88% of the crop (run *before* the recognizer, so it is free);
+quality floors as before; then for a single digit, widen the region one
+digit-width left, re-read, then right, re-read — a digit pair appearing on
+either side means drop; then the multiset; then, if a crop still carries two
+different numbers, drop the crop. Region geometry is now stored in
+`labels.parquet`, so the set is auditable and re-filterable without
+re-running the models. CRAFT input is capped at 1600px (entry 8's TODO).
+
+**Two guard designs that looked right and were wrong** — both caught only by
+rendering the rejects and looking:
+
+- *Rejecting regions that touch the crop's side edge* killed 15.7% of
+  two-digit reads. Two of twelve sampled rejects were large, correct chest
+  numbers that simply ran to the boundary of a tight detection box.
+  Centrality alone catches the intruders and keeps these. Dropped.
+- *Recovering* the full number from the widening test (lone "8" widens to
+  "78" → relabel 78) is very appealing: it converts discards into labels,
+  and it passed the multiset check. **About a third of the recoveries were
+  wrong.** The widened patch is mostly fabric and PARSeq hallucinates a
+  plausible second digit from a fold or seam ("1" especially) — the entry-3
+  and entry-5 finding again, and the multiset misses it for the same reason
+  it misses the truncation. The widening test is now **reject-only**.
+- A third guard was considered and rejected on the evidence: regions in the
+  top 15% of the crop looked like junk (a sideline down marker read as "3"),
+  but rendering all 147 of them showed they are overwhelmingly **shoulder
+  numbers** — legitimate, and a signal worth keeping.
+
+**Results** (both games, 6,211 aligned frames, 29,775 closeup detections,
+14,404 raw reads; 1h51m + 2h59m on the GPU, no Metal aborts — the size cap
+holds). Rejections: format 8,272, multiset 1,689, off-player 1,463,
+untestable single 567, digit_share 507, truncated single 387, confidence
+243, crop conflict 54.
+
+|                     | v1     | v2     |
+|---------------------|--------|--------|
+| labels              | 3,341  | 2,685  |
+| crops               | 3,239  | 2,653  |
+| single-digit share  | 28.3%  | 12.1%  |
+| distinct numbers    | 70     | 69     |
+| median labels/number| 34     | 32     |
+
+80% retention, and coverage is essentially unchanged — what went was
+concentrated in the contaminated slice. The most-frequent labels are now
+72/78/55/74/18 rather than v1's 5/3/8/72/2: the single-digit inflation was
+the bug showing up in the histogram all along, if anyone had asked why
+skill-position numbers dominated a set built mostly from line play.
+
+**Residual error** (audited): two-digit labels 12/12 correct; single-digit
+~9/12, the remainder being non-jersey digits (sideline markers) and
+non-player detections (a coach on the sideline). Roughly 3% overall, down
+from roughly 7%.
+
+**Method note.** Both label-quality bugs found so far (eval v0, pseudo v1)
+were invisible in counts and confidence histograms and obvious in a
+twelve-crop contact sheet. `audit_labels.py` exists so that looking is a
+pipeline step rather than a debugging afterthought.
+
 ---
 
 ## Architectural conclusions so far
@@ -339,3 +432,9 @@ shapes entirely.
 - **Guard the belief state.** Recognizer confidence is miscalibrated on
   out-of-distribution input; non-jersey digits abound. Evidence quality
   gating matters as much as evidence collection.
+- **A cross-check's strength scales with how much the evidence constrains**
+  (experiment 9). The roster multiset is strong against a two-digit read and
+  weak against a single digit; the same check, the same data, a fourfold
+  difference in filtering power. When the belief state ingests evidence,
+  what it must weigh is not "did an independent source agree" but "how
+  surprised would that source have been to agree by chance."

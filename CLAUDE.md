@@ -64,10 +64,21 @@ table access; pipeline scripts take `--game` (default `2025_15_WAS_NYG`).
    crude fixed torso band. Do NOT re-cut a policy dir that an eval set
    references — crop filenames encode detection order, which is not stable
    across sources; use a new policy name instead.
-6. `scripts/make_eval_sheets.py` — labeling contact sheets for eval sets;
+6. `scripts/pseudo_labels.py` — the teacher path: reads closeup-scale
+   detections on every aligned frame with CRAFT+PARSeq and keeps only reads
+   that survive geometry, quality, truncation and roster-multiset checks,
+   yielding per-crop number labels with no hand-labeling. Writes
+   `pseudo/<policy>/` + `labels.parquet`; policy is versioned like crop
+   policy, because the accept rules decide what a label *means* — v1 is the
+   pre-audit harvest, v2 adds the guards from EXPERIMENTS.md entry 9.
+7. `scripts/classify_colors.py` — per-crop team color (HSV, grass/skin
+   masked) so a play's number multiset can be split by team. Writes
+   `color.parquet`. The burgundy scorer is untuned (week 1 WAS wore
+   burgundy at home; needs a week-1 eval set).
+8. `scripts/make_eval_sheets.py` — labeling contact sheets for eval sets;
    labels live in repo-tracked `eval/` (hand-labeled work is not
    re-derivable, unlike everything in `data/`).
-7. `scripts/read_jerseys.py`, `scripts/localize_recognize.py`,
+9. `scripts/read_jerseys.py`, `scripts/localize_recognize.py`,
    `scripts/sr_stack.py` — experiment scripts (see EXPERIMENTS.md entries
    2-4); superseded in parts but kept as baselines.
 
@@ -84,6 +95,18 @@ table access; pipeline scripts take `--game` (default `2025_15_WAS_NYG`).
   (experiment 4): ~0.1px inter-frame shift diversity + h264 block copying.
 - Frames contain many legible non-jersey digits (yard markers, chain-crew
   signs, field numbers); digit reads must be gated to player torsos.
+- The roster-multiset cross-check is strong for two-digit reads and weak for
+  single-digit ones: a stray digit only has to match one of the ~3
+  single-digit numbers on the field, and those belong to QBs, WRs and DBs —
+  exactly the players who dominate closeups. Single-digit reads need their
+  own evidence (experiment 9).
+- A crop's label must answer "what number is *this* player wearing?", not
+  "is some on-roster number visible in this picture?" Neighbouring players
+  intrude at the edges of a detection box; a read's geometry matters as much
+  as its content.
+- Verify a label set by looking at sampled crops before training on it. Both
+  label-quality bugs found so far (eval v0, pseudo v1) were invisible in the
+  aggregate statistics and obvious in a 12-crop contact sheet.
 
 ## Conventions
 

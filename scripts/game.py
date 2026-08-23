@@ -34,6 +34,9 @@ class Game:
     def crops_dir(self, policy: str) -> Path:
         return self.dir / "crops" / policy
 
+    def pseudo_dir(self, policy: str) -> Path:
+        return self.dir / "pseudo" / policy
+
     def pbp(self) -> pl.DataFrame:
         return pl.read_parquet(
             NFLVERSE / f"play_by_play_{self.season}.parquet"
