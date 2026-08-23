@@ -23,9 +23,11 @@
   main { flex: 1; display: flex; min-height: 0; }
   #videowrap { flex: 1; display: flex; align-items: center; background: #000; min-width: 0; }
   video { width: 100%; max-height: 100%; }
+  #divider { flex: none; width: 5px; cursor: col-resize; background: var(--edge); }
+  #divider:hover, #divider.dragging { background: var(--accent); }
   #panel {
-    width: 400px; flex: none; overflow-y: auto; background: var(--panel);
-    border-left: 1px solid var(--edge); padding: 12px; display: flex;
+    width: 400px; min-width: 240px; flex: none; overflow-y: auto;
+    background: var(--panel); padding: 12px; display: flex;
     flex-direction: column; gap: 10px;
   }
   .card { background: var(--card); border: 1px solid var(--edge); border-radius: 8px; padding: 10px 12px; }
@@ -65,6 +67,7 @@
 </header>
 <main>
   <div id="videowrap"><video id="video" src="/video" controls preload="metadata"></video></div>
+  <div id="divider"></div>
   <div id="panel">
     <div class="card">
       <h2>Score bug</h2>
@@ -89,6 +92,7 @@
   <span id="lat"></span>
   <span id="predt"></span>
   <label><input type="checkbox" id="predicttoggle" checked> predict</label>
+  <span style="margin-left:auto" title="keyboard controls">space play/pause · ←/→ 5s · j/l 10s · ,/. frame · m mute · f fullscreen</span>
 </footer>
 <script>
 const INFO = __GAME_INFO__;
@@ -183,6 +187,55 @@ function render(msg) {
     // frames while the state of the game does not
   }
 }
+
+// --- keyboard transport ---------------------------------------------------
+// One set of controls for both domains: everything routes through the video
+// element, whose events already forward the clock to the engine.
+const FRAME_S = 1 / 29.97;
+function seekBy(dt) {
+  video.currentTime = Math.min(Math.max(video.currentTime + dt, 0), video.duration || Infinity);
+}
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
+  const actions = {
+    " ": () => video.paused ? video.play() : video.pause(),
+    "k": () => video.paused ? video.play() : video.pause(),
+    "ArrowLeft": () => seekBy(-5),
+    "ArrowRight": () => seekBy(5),
+    "j": () => seekBy(-10),
+    "l": () => seekBy(10),
+    ",": () => { video.pause(); seekBy(-FRAME_S); },
+    ".": () => { video.pause(); seekBy(FRAME_S); },
+    "m": () => video.muted = !video.muted,
+    "f": () => document.fullscreenElement ? document.exitFullscreen() : video.requestFullscreen(),
+  };
+  const act = actions[e.key];
+  if (act) { e.preventDefault(); act(); }
+}, {capture: true});
+
+// --- resizable panes --------------------------------------------------------
+const divider = document.getElementById("divider");
+const panel = document.getElementById("panel");
+const savedWidth = localStorage.getItem("panelWidth");
+if (savedWidth) panel.style.width = savedWidth + "px";
+divider.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  divider.classList.add("dragging");
+  const onMove = (ev) => {
+    const w = Math.min(Math.max(window.innerWidth - ev.clientX, 240),
+                       window.innerWidth * 0.7);
+    panel.style.width = w + "px";
+  };
+  const onUp = (ev) => {
+    onMove(ev);
+    divider.classList.remove("dragging");
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    localStorage.setItem("panelWidth", panel.offsetWidth);
+  };
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+});
 
 connect();
 </script>
