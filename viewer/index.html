@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>field viewer</title>
+<style>
+  :root {
+    --bg: #101418; --panel: #1a2129; --card: #212a34; --edge: #2e3a46;
+    --text: #e8edf2; --dim: #8b98a5; --accent: #4cc38a; --warn: #e5a50a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); height: 100vh;
+    font: 14px/1.45 -apple-system, "SF Pro Text", Helvetica, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {  
+    padding: 8px 14px; display: flex; align-items: baseline; gap: 12px;
+    border-bottom: 1px solid var(--edge);
+  }
+  header h1 { font-size: 15px; font-weight: 600; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #videowrap { flex: 1; display: flex; align-items: center; background: #000; min-width: 0; }
+  video { width: 100%; max-height: 100%; }
+  #panel {
+    width: 400px; flex: none; overflow-y: auto; background: var(--panel);
+    border-left: 1px solid var(--edge); padding: 12px; display: flex;
+    flex-direction: column; gap: 10px;
+  }
+  .card { background: var(--card); border: 1px solid var(--edge); border-radius: 8px; padding: 10px 12px; }
+  .card h2 {
+    font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--dim);
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  #bugline { font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  #bugline .dim { color: var(--dim); font-weight: 400; font-size: 15px; }
+  #playmeta { font-weight: 600; margin-bottom: 4px; }
+  #playdesc { color: var(--dim); font-size: 12.5px; }
+  #alignnote { color: var(--warn); font-size: 12px; margin-top: 4px; }
+  #personnel { font-size: 30px; font-weight: 700; color: var(--accent); }
+  #personnel .label { font-size: 12px; font-weight: 400; color: var(--dim); margin-left: 8px; }
+  .teams { display: flex; gap: 10px; }
+  .team { flex: 1; min-width: 0; }
+  .team h3 { font-size: 12px; margin-bottom: 4px; color: var(--accent); }
+  .team.def h3 { color: #6aa9ff; }
+  .team ul { list-style: none; font-size: 12px; }
+  .team li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team li .num { display: inline-block; width: 24px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .team li .pos { display: inline-block; width: 30px; color: var(--dim); }
+  footer {
+    display: flex; align-items: center; gap: 14px; padding: 7px 14px;
+    border-top: 1px solid var(--edge); font-size: 12px; color: var(--dim);
+  }
+  footer .dot { width: 8px; height: 8px; border-radius: 50%; background: #d33; display: inline-block; margin-right: 5px; }
+  footer .dot.ok { background: var(--accent); }
+  footer label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .empty { color: var(--dim); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>field</h1>
+  <span class="sub" id="gameinfo"></span>
+</header>
+<main>
+  <div id="videowrap"><video id="video" src="/video" controls preload="metadata"></video></div>
+  <div id="panel">
+    <div class="card">
+      <h2>Score bug</h2>
+      <div id="bugline" class="empty">no reading yet</div>
+    </div>
+    <div class="card">
+      <h2>Aligned play <span style="text-transform:none">(nflverse)</span></h2>
+      <div id="playbody" class="empty">not aligned</div>
+    </div>
+    <div class="card">
+      <h2>Offensive personnel</h2>
+      <div id="personnelbody" class="empty">–</div>
+    </div>
+    <div class="card">
+      <h2>On the field <span style="text-transform:none">(nflverse; roster positions)</span></h2>
+      <div id="fieldbody" class="empty">–</div>
+    </div>
+  </div>
+</main>
+<footer>
+  <span><span class="dot" id="wsdot"></span><span id="wsstate">connecting…</span></span>
+  <span id="lat"></span>
+  <span id="predt"></span>
+  <label><input type="checkbox" id="predicttoggle" checked> predict</label>
+</footer>
+<script>
+const INFO = __GAME_INFO__;
+document.getElementById("gameinfo").textContent = INFO.game_id + " · " + INFO.video;
+
+const video = document.getElementById("video");
+const toggle = document.getElementById("predicttoggle");
+let ws = null;
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => {
+    setStatus(true, "engine connected");
+    sendClock();
+    ws.send(JSON.stringify({type: "predict", on: toggle.checked}));
+  };
+  ws.onclose = () => { setStatus(false, "engine disconnected — retrying"); setTimeout(connect, 1500); };
+  ws.onmessage = (ev) => render(JSON.parse(ev.data));
+}
+function setStatus(ok, text) {
+  document.getElementById("wsdot").className = "dot" + (ok ? " ok" : "");
+  document.getElementById("wsstate").textContent = text;
+}
+function sendClock() {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({type: "clock", t: video.currentTime, playing: !video.paused}));
+}
+let lastSent = 0;
+video.addEventListener("timeupdate", () => {
+  const now = performance.now();
+  if (now - lastSent > 400) { lastSent = now; sendClock(); }
+});
+for (const ev of ["play", "pause", "seeked"]) video.addEventListener(ev, sendClock);
+toggle.addEventListener("change", () => {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({type: "predict", on: toggle.checked}));
+});
+
+const DOWNS = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"};
+function fmtDD(down, ydstogo) {
+  if (down == null) return "";
+  return `${DOWNS[down]} & ${ydstogo === 0 ? "Goal" : ydstogo}`;
+}
+
+function render(msg) {
+  if (msg.type === "status" && msg.ready) { setStatus(true, "engine ready"); return; }
+  if (msg.type !== "prediction") return;
+
+  document.getElementById("predt").textContent = `predicted @ ${msg.t.toFixed(0)}s`;
+  document.getElementById("lat").textContent = msg.latency_ms != null ? `${msg.latency_ms} ms` : "";
+
+  const bugEl = document.getElementById("bugline");
+  const b = msg.bug || {};
+  if (b.clock || b.qtr || b.down != null) {
+    const qtr = b.qtr ? (b.qtr === 5 ? "OT" : `Q${b.qtr}`) : "";
+    bugEl.className = "";
+    bugEl.innerHTML =
+      `${b.clock ?? "–:––"} <span class="dim">${qtr}</span>` +
+      (b.down != null ? ` <span class="dim">·</span> ${fmtDD(b.down, b.ydstogo)}` : "");
+  } else {
+    bugEl.className = "empty";
+    bugEl.textContent = "no bug visible";
+  }
+
+  const playEl = document.getElementById("playbody");
+  const persEl = document.getElementById("personnelbody");
+  const fieldEl = document.getElementById("fieldbody");
+  if (msg.play) {
+    const p = msg.play;
+    playEl.className = "";
+    playEl.innerHTML =
+      `<div id="playmeta">${p.posteam} ball · Q${p.qtr} ${p.time} · ${fmtDD(p.down, p.ydstogo)} at ${p.yrdln}</div>` +
+      `<div id="playdesc">${p.desc ?? ""}</div>` +
+      (msg.note ? `<div id="alignnote">${msg.note}</div>` : "");
+    if (msg.personnel != null) {
+      persEl.className = "";
+      persEl.innerHTML = `<span id="personnel">${msg.personnel}<span class="label">personnel (from nflverse)</span></span>`;
+    }
+    if (msg.participation) {
+      const side = (name, team, cls) =>
+        `<div class="team ${cls}"><h3>${team}</h3><ul>` +
+        msg.participation[name].map(pl =>
+          `<li><span class="num">${pl.num}</span><span class="pos">${pl.pos}</span>${pl.name}</li>`
+        ).join("") + "</ul></div>";
+      fieldEl.className = "";
+      fieldEl.innerHTML = `<div class="teams">${side("offense", p.posteam, "off")}${side("defense", p.defteam, "def")}</div>`;
+    }
+  } else {
+    playEl.className = "empty";
+    playEl.textContent = msg.note || "not aligned";
+    // keep last personnel/participation on screen: alignment flickers between
+    // frames while the state of the game does not
+  }
+}
+
+connect();
+</script>
+</body>
+</html>

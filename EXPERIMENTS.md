@@ -411,6 +411,45 @@ pipeline step rather than a debugging afterthought.
 
 ---
 
+## 10. Live viewer v0: the game loop exists (server/app.py + viewer/)
+
+**Question.** Can the score-bug → alignment stack run against a playing
+video in real time, displayed beside it — the spine every later predictor
+plugs into?
+
+**Setup.** One aiohttp process serves the viewer page, the video file
+(range requests, so `<video>` seeks), and a WebSocket. The browser's
+video element owns the playback clock and reports it over the socket;
+a worker thread predicts on the *newest* reported time only — no queue,
+so a slow tick costs coverage, never freshness. Per tick: grab the frame
+with cv2 (seek by msec), OCR the bug, `parse_bug` + `match_play`, ship
+bug state + aligned play + participation + personnel code to the page.
+
+**Result.** Works end to end on the week-15 broadcast: ~220–350 ms per
+tick on MPS (seek + OCR + align), comfortably inside the 1 Hz cadence,
+correct clock/quarter/down readings on pre-snap wide shots, correct play
+alignment with the full 22 displayed as the play unfolds.
+
+**Negative result worth keeping: two OCR paths had silently diverged.**
+`scorebug_align.ocr_bug_tokens` (full-width strip below y=820, 3×) fails
+to read the game clock on frames where `sweep_broadcast.ocr_roi_tokens`
+(tight ROI (450,845)–(1500,1030), 2×) reads it fine — same recognizer,
+same frame, different crop/scale, different tokens ("11:32" → "12132"
+in the full strip). The manifest was validated with the ROI path, so the
+viewer uses it; first suspicion (CPU-vs-MPS nondeterminism) was checked
+and cleared — tokens are identical across devices. Lesson: EasyOCR reads
+are a function of crop context, not just the pixels of the text itself;
+there should eventually be one blessed bug-OCR function, not two.
+
+**Also learned** (user-observed, Tunsil injury): participation positions
+are *roster* positions, not alignment — after Tunsil left, WAS's real
+line showed as 3 G + 1 T with 3 TEs on the field (Coleman, rostered G,
+played T). The panel is labeled "roster positions" accordingly; any
+future formation predictor must not treat roster position as where a
+player lines up.
+
+---
+
 ## Architectural conclusions so far
 
 - **No single frame answers "who's on the field."** Wide formation shots

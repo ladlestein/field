@@ -82,6 +82,20 @@ table access; pipeline scripts take `--game` (default `2025_15_WAS_NYG`).
    `scripts/sr_stack.py` — experiment scripts (see EXPERIMENTS.md entries
    2-4); superseded in parts but kept as baselines.
 
+## Live viewer
+
+`server/app.py` (engine) + `viewer/index.html` (page) — the game loop: one
+aiohttp process serving the page, the video (with range support), and a
+WebSocket. The browser's `<video>` owns the playback clock; the engine
+predicts on the newest reported time only (freshness over coverage — a
+prediction after the snap is worthless). The server adds `scripts/` to
+sys.path to reuse the pipeline modules. Run with
+`.venv/bin/python3 server/app.py`, open
+http://127.0.0.1:8899/. Bug OCR must use `sweep_broadcast.ocr_roi_tokens`
+(the manifest-validated path), NOT `scorebug_align.ocr_bug_tokens` — same
+recognizer, different crop, different reads (EXPERIMENTS.md entry 10).
+Participation positions shown are roster positions, not alignment.
+
 ## Hard-won facts (don't re-learn these)
 
 - Broadcast OCR: the FOX bug's condensed font reads 1 as I and the clock
