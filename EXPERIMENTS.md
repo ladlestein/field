@@ -450,6 +450,47 @@ player lines up.
 
 ---
 
+## 11. Shot-type gate v0: the router exists (scripts/shot_gate.py)
+
+**Question.** Can a cheap rule set over the YOLO detection census route
+frames (wide / closeup / other) reliably enough to feed formation
+analysis only real wide shots?
+
+**Setup.** Features per frame: count of "field-scale" detections
+(height 28–155px, feet above the score bug), count of "big" ones
+(≥300px), median field-scale height, and grass fraction (HSV turf mask
+over the lower ⅔). Verdict rules over those; ~6ms YOLO + mask per frame
+on MPS, so the gate is free at any live cadence. Ground truth for
+tuning: the feature distribution of the 125 play-clock representative
+frames in plays.csv (known formation shots); validation by contact
+sheet, per the house rule.
+
+**First thresholds were wrong in both directions** (guessed, not
+measured): median-height cap 110px rejected half of true wides (the
+real q05–q95 is 88–137), and requiring *zero* big detections misrouted
+punt/PAT formations to closeup — ~10% of true wides carry 1–2 near-camera
+sideline bodies. Measuring the known-good distribution before setting
+thresholds fixed both in one pass. Final: n_field ≥ 9, med_h ≤ 150,
+n_big ≤ 2, grass ≥ 0.30.
+
+**Results** (this game). Random 120-frame sample: 35 wide / 47 closeup
+/ 38 other, with zero junk in the wide sheet (two borderline
+between-play transition shots at wide scale; harmless — formation
+analysis finds no formation there). Play-level recall: 520 of 1,151
+aligned play-clock frames gate wide, covering 103/125 plays (82.4%).
+**The 22 missed plays are the broadcast's fault, not the gate's**: a
+contact sheet of their pre-snap frames shows every one is a closeup —
+QB walking to the line, coaches, sideline — the wide camera simply
+never ran before those snaps at 1fps sampling. 82% is the source's
+ceiling here.
+
+**Design note.** The gate classifies camera *scale* only; pre-snap-ness
+stays with the play clock (manifest / live bug OCR), and play-type
+routing (scrimmage vs kick) stays with alignment. Keeping those
+concerns out of the gate keeps its failure modes legible.
+
+---
+
 ## Architectural conclusions so far
 
 - **No single frame answers "who's on the field."** Wide formation shots

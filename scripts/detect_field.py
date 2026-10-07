@@ -85,7 +85,7 @@ def dedupe_boxes(boxes, containment_thresh=0.7):
 
 def detect_players(model, img):
     from game import torch_device
-    results = model.predict(img, classes=[0], conf=0.08, verbose=True,
+    results = model.predict(img, classes=[0], conf=0.08, verbose=False,
                             device=torch_device())  # class 0 = person
     boxes = []
     for box in results[0].boxes:

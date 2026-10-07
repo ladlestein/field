@@ -81,6 +81,13 @@ table access; pipeline scripts take `--game` (default `2025_15_WAS_NYG`).
 9. `scripts/read_jerseys.py`, `scripts/localize_recognize.py`,
    `scripts/sr_stack.py` — experiment scripts (see EXPERIMENTS.md entries
    2-4); superseded in parts but kept as baselines.
+10. `scripts/shot_gate.py` — shot-type router: classifies a frame as
+    wide / closeup / other from the YOLO detection census + grass
+    fraction (~6ms/frame). Gates camera *scale* only — pre-snap-ness is
+    the play clock's job, play-type routing is alignment's. Thresholds
+    tuned against measured feature distributions, not guessed
+    (EXPERIMENTS.md entry 11); CLI writes per-verdict contact sheets to
+    eval/shot_gate/ for re-validation after any threshold change.
 
 ## Live viewer
 
