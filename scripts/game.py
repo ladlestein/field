@@ -47,6 +47,12 @@ class Game:
             NFLVERSE / f"pbp_participation_{self.season}.parquet"
         ).filter(pl.col("nflverse_game_id") == self.game_id)
 
+    def ftn(self) -> pl.DataFrame:
+        """FTN charting rows for this game, keyed by nflverse_play_id."""
+        return pl.read_parquet(
+            NFLVERSE / f"ftn_charting_{self.season}.parquet"
+        ).filter(pl.col("nflverse_game_id") == self.game_id)
+
 
 def add_game_arg(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--game", default=DEFAULT_GAME,

@@ -491,6 +491,75 @@ concerns out of the gate keeps its failure modes legible.
 
 ---
 
+## 12. Pre-snap formation geometry v0 (scripts/presnap.py)
+
+**Question.** From one gated wide pre-snap frame: LOS, offense/defense
+split, and three graded calls — formation family (shotgun / under
+center / pistol), backfield count (FTN's `n_offense_backfield`,
+QB excluded), defensive shell (0/1/2-high).
+
+**What works (the durable machinery).** Painted yard lines fitted as
+individual (point, direction) lines; a player's field-depth is
+interpolated between the two lines bracketing his feet (5yd apart on
+the ground), which handles perspective exactly and yields a local
+px/yard scale as a byproduct. LOS from the densest 4yd player band,
+re-anchored to the OL row's median depth; offense = the side whose
+deep bodies are fewer (safeties outnumber the one deep umpire);
+"the QB" = the most-central back, selected not gated. Ground truth
+joined from participation (`offense_formation`) + FTN
+(`n_offense_backfield`, `qb_location`).
+
+**Six wrong designs this entry paid for** (each caught by rendering
+overlays, not by the aggregate numbers):
+
+1. *Single-axis depth projection* — perpendicular-in-image is not
+   perpendicular-on-ground; wide-split WRs picked up ±40yd phantom
+   depth. Replaced by per-line interpolation.
+2. *Per-pixel grass gate* — dropped every player standing on the giant
+   midfield logo. Replaced by field-region (largest grass component,
+   holes filled).
+3. *Fixed pixel height band* (inherited from the shot gate) — at tight
+   zooms (70+ px/yd) the standing QB exceeds 155px and vanished,
+   reading as "no central back" = phantom under-center. Replaced by
+   height relative to local yard scale (0.6-3.0 player-heights).
+4. *Angle-consistency filter on yard lines* — perspective legitimately
+   fans their image angles 10-30°; the filter nuked every frame.
+   Extent alone (≥250px) separates real lines from painted digit
+   strokes.
+5. *Blob-height under-center detector* — hypothesis: UC's QB+C merge
+   into one anomalously tall YOLO box. Measured: distributions
+   identical across classes (median ratio 1.15 everywhere). Dead.
+6. *Multi-frame voting across the play-clock window* — per-class depth
+   medians collapsed (3.53/3.66/3.76) because early-window frames
+   measure a formation still assembling, not the same formation with
+   noise. Freshness-over-coverage applies within the pre-snap window;
+   voting over the last ~2s keeps the separation.
+
+**Results** (88 analyzable plays of 93 with truth + wide frame):
+
+- Formation 59/88 (67%) — **below the always-shotgun baseline
+  (70.5%)**, stated plainly. Unlike the baseline it recalls half the
+  under-center plays and both other calls ride on the same geometry,
+  but as a pure single-frame classifier it is at the noise floor:
+  measured class medians (depth of most-central back behind the OL
+  row's feet) are pistol 2.9 / shotgun 3.7 / UC-RB ~4.3+, within
+  ±0.5yd noise of each other. I-form FB vs pistol QB is geometrically
+  degenerate at this resolution (accepted confusion).
+- Backfield count 49/88 exact (56%), 80/88 within ±1 (91%).
+- Shell: no public label; distribution (2-high 51, 1-high 33, 0-high 4)
+  is plausible for a snowy December game. Grade later against
+  `defense_coverage_type` correlation.
+
+**Paths forward, in expected-value order:** (a) detect FOX's virtual
+blue LOS line by color — removes the OL-row anchoring noise entirely;
+(b) feet estimation better than box-bottom (bent postures bias depth);
+(c) fuse situation priors (down/distance/clock strongly predict
+formation) — this is the project's Bayesian architecture anyway, and
+vision-vs-prior disagreement is itself a signal; (d) eventually a small
+learned classifier on the backfield image patch, trained league-wide.
+
+---
+
 ## Architectural conclusions so far
 
 - **No single frame answers "who's on the field."** Wide formation shots

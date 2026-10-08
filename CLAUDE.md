@@ -88,6 +88,15 @@ table access; pipeline scripts take `--game` (default `2025_15_WAS_NYG`).
     tuned against measured feature distributions, not guessed
     (EXPERIMENTS.md entry 11); CLI writes per-verdict contact sheets to
     eval/shot_gate/ for re-validation after any threshold change.
+11. `scripts/presnap.py` — pre-snap formation geometry on gated wide
+    frames: per-yard-line depth interpolation (never a single image
+    axis — perspective), field-region player gating, LOS re-anchored
+    to the OL row, QB = most-central back (selected, not gated).
+    Calls formation family / backfield count / defensive shell; eval
+    CLI grades vs participation+FTN and writes disagreement overlays
+    to eval/presnap/. v0 formation accuracy is BELOW the always-
+    shotgun baseline (67% vs 70.5%) — read EXPERIMENTS.md entry 12
+    (six documented wrong designs) before touching thresholds.
 
 ## Live viewer
 
